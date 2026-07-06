@@ -1,12 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
-import type { Database } from '../types/database'
+import { createClient } from "@supabase/supabase-js";
 
-const url = import.meta.env.VITE_SUPABASE_URL as string
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+const url = import.meta.env.VITE_SUPABASE_URL as string;
+const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-export const isSupabaseConfigured =
-  url?.startsWith('http') && key?.length > 20
+export const isSupabaseConfigured = url?.startsWith("http") && key?.length > 20;
 
-export const supabase = isSupabaseConfigured
-  ? createClient<Database>(url, key)
-  : null!
+export const supabase = (
+  isSupabaseConfigured ? createClient(url, key) : null!
+) as any;
