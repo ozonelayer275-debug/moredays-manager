@@ -116,7 +116,8 @@ export async function fetchDistinctFeeTypes(): Promise<string[]> {
     .from("fee_structures")
     .select("fee_type")
   if (error) throw error;
-  return [...new Set((data ?? []).map(r => r.fee_type))]
+  const rows = (data ?? []) as Pick<FeeStructure, 'fee_type'>[]
+  return [...new Set(rows.map(r => r.fee_type))]
 }
 
 // ── Fee Payments ──────────────────────────────────────────────────────────────
