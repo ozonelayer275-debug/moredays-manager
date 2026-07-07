@@ -30,6 +30,7 @@ export default function StudentsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [classFilter, setClassFilter] = useState('all')
   const [feeSearch, setFeeSearch] = useState('')
   const [showAddStudent, setShowAddStudent] = useState(false)
   const [editingStudent, setEditingStudent] = useState<Student | null>(null)
@@ -49,11 +50,23 @@ export default function StudentsPage() {
 
   useEffect(() => { load() }, [load])
 
-  const filteredStudents = students.filter(s =>
-    s.name.toLowerCase().includes(search.toLowerCase()) ||
-    s.class.toLowerCase().includes(search.toLowerCase()) ||
-    s.guardian_name.toLowerCase().includes(search.toLowerCase())
-  )
+  const allClasses = [...new Set(students.map(s => s.class))].sort()
+
+  const filteredStudents = students.filter(s => {
+    const matchesClass = classFilter === 'all' || s.class === classFilter
+    const q = search.toLowerCase()
+    const matchesSearch = !q ||
+      s.name.toLowerCase().includes(q) ||
+      s.class.toLowerCase().includes(q) ||
+      (s.guardian_name ?? '').toLowerCase().includes(q)
+    return matchesClass && matchesSearch
+  })
+
+  const groupedStudents = filteredStudents.reduce<Record<string, Student[]>>((acc, s) => {
+    if (!acc[s.class]) acc[s.class] = []
+    acc[s.class].push(s)
+    return acc
+  }, {})
 
   const sortedBalances = [...balances].filter(b => b.balance > 0).sort((a, b) => b.balance - a.balance)
 
@@ -132,7 +145,10 @@ export default function StudentsPage() {
         <LoadingSkeleton />
       ) : tab === 'students' ? (
         <StudentsTab
-          students={filteredStudents} search={search} onSearch={setSearch}
+          students={filteredStudents} groupedStudents={groupedStudents}
+          search={search} onSearch={setSearch}
+          classFilter={classFilter} onClassFilter={setClassFilter}
+          allClasses={allClasses}
           deletingId={deletingId} onNavigate={id => navigate(`/students/${id}`)}
           onEdit={s => { setEditingStudent(s); setShowAddStudent(true) }}
           onDelete={handleDeleteStudent}
@@ -161,48 +177,74 @@ export default function StudentsPage() {
 }
 
 // ── Students Tab ──────────────────────────────────────────────────────────────
-function StudentsTab({ students, search, onSearch, deletingId, onNavigate, onEdit, onDelete }: {
-  students: Student[]; search: string; onSearch: (v: string) => void
+function StudentsTab({ students, groupedStudents, search, onSearch, classFilter, onClassFilter, allClasses, deletingId, onNavigate, onEdit, onDelete }: {
+  students: Student[]
+  groupedStudents: Record<string, Student[]>
+  search: string; onSearch: (v: string) => void
+  classFilter: string; onClassFilter: (v: string) => void
+  allClasses: string[]
   deletingId: string | null; onNavigate: (id: string) => void
   onEdit: (s: Student) => void; onDelete: (id: string) => void
 }) {
+  const classes = Object.keys(groupedStudents).sort()
+
   return (
     <div className="space-y-3">
-      <div className="relative">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        <input value={search} onChange={e => onSearch(e.target.value)}
-          placeholder="Search name, class or guardian…"
-          className="w-full border border-gray-200 rounded-lg pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white" />
+      {/* Search + class filter */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input value={search} onChange={e => onSearch(e.target.value)}
+            placeholder="Search name or guardian…"
+            className="w-full border border-gray-200 rounded-lg pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 bg-white" />
+        </div>
+        <select value={classFilter} onChange={e => onClassFilter(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 bg-white shrink-0">
+          <option value="all">All Classes</option>
+          {allClasses.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
       </div>
 
       {students.length === 0 ? (
-        <EmptyState text={search ? `No students match "${search}"` : 'No students yet — tap + Add Student.'} />
+        <EmptyState text={search || classFilter !== 'all' ? 'No students match your filter.' : 'No students yet — tap + Add Student.'} />
       ) : (
         <>
           <p className="text-xs text-gray-400">{students.length} student{students.length !== 1 ? 's' : ''}</p>
-          {students.map(s => (
-            <div key={s.id} onClick={() => onNavigate(s.id)}
-              className="bg-white rounded-xl border border-gray-200 px-4 py-3.5 flex items-center justify-between gap-3 cursor-pointer active:bg-gray-50 transition-colors">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-gray-900 truncate">{s.name}</p>
-                  {s.status === 'withdrawn' && (
-                    <span className="text-[10px] font-medium text-gray-400 border border-gray-200 px-1.5 py-0.5 rounded shrink-0">Withdrawn</span>
-                  )}
-                </div>
-                <p className="text-xs text-gray-400 mt-0.5">{s.class} · {s.guardian_name}</p>
+          {classes.map(cls => (
+            <div key={cls} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                <p className="text-[10px] uppercase tracking-wider font-medium text-gray-400">{cls}</p>
+                <p className="text-[10px] uppercase tracking-wider font-medium text-gray-400">{groupedStudents[cls].length} student{groupedStudents[cls].length !== 1 ? 's' : ''}</p>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <button onClick={e => { e.stopPropagation(); onEdit(s) }}
-                  className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100 transition-colors">Edit</button>
-                <button onClick={e => { e.stopPropagation(); onDelete(s.id) }}
-                  disabled={deletingId === s.id}
-                  className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50 transition-colors disabled:opacity-40">
-                  {deletingId === s.id ? '…' : 'Del'}
-                </button>
-                <svg className="text-gray-300 ml-1" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              <div className="divide-y divide-gray-100">
+                {groupedStudents[cls].map(s => (
+                  <div key={s.id} onClick={() => onNavigate(s.id)}
+                    className="px-4 py-3 flex items-center justify-between gap-3 cursor-pointer active:bg-gray-50 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-gray-900 truncate">{s.name}</p>
+                        {s.status === 'withdrawn' && (
+                          <span className="text-[10px] font-medium text-gray-400 border border-gray-200 px-1.5 py-0.5 rounded shrink-0">Withdrawn</span>
+                        )}
+                      </div>
+                      {s.guardian_name && (
+                        <p className="text-xs text-gray-400 mt-0.5">{s.guardian_name}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={e => { e.stopPropagation(); onEdit(s) }}
+                        className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100 transition-colors">Edit</button>
+                      <button onClick={e => { e.stopPropagation(); onDelete(s.id) }}
+                        disabled={deletingId === s.id}
+                        className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50 transition-colors disabled:opacity-40">
+                        {deletingId === s.id ? '…' : 'Del'}
+                      </button>
+                      <svg className="text-gray-300 ml-1" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ))}

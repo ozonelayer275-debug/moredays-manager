@@ -104,9 +104,8 @@ export default function AddStudentModal({ student, onSave, onClose }: Props) {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={label}>Guardian Name</label>
+            <label className={label}>Guardian Name <span className="font-normal text-gray-400">(optional)</span></label>
             <input
-              required
               value={guardianName}
               onChange={(e) => setGuardianName(e.target.value)}
               placeholder="Mrs. Okafor"
@@ -114,9 +113,8 @@ export default function AddStudentModal({ student, onSave, onClose }: Props) {
             />
           </div>
           <div>
-            <label className={label}>Guardian Phone</label>
+            <label className={label}>Guardian Phone <span className="font-normal text-gray-400">(optional)</span></label>
             <input
-              required
               value={guardianPhone}
               onChange={(e) => setGuardianPhone(e.target.value)}
               placeholder="08012345678"
