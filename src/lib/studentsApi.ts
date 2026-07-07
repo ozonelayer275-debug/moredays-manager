@@ -111,6 +111,14 @@ export async function deleteFeeStructure(id: string) {
   if (error) throw error;
 }
 
+export async function fetchDistinctFeeTypes(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("fee_structures")
+    .select("fee_type")
+  if (error) throw error;
+  return [...new Set((data ?? []).map(r => r.fee_type))]
+}
+
 // ── Fee Payments ──────────────────────────────────────────────────────────────
 
 export type PaymentWithStructure = FeePayment & {

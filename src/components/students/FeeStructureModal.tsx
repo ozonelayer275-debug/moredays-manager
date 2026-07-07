@@ -2,85 +2,88 @@ import { useState, useEffect } from "react";
 import type { FormEvent } from "react";
 import { nairaToKobo, koboToNaira } from "../../lib/currency";
 import { Sheet, SubmitButton } from "./AddStudentModal";
+import { fetchDistinctFeeTypes } from "../../lib/studentsApi";
 import type { Database } from "../../types/database";
 
 type FeeStructure = Database["public"]["Tables"]["fee_structures"]["Row"];
 
 interface Props {
   structure?: FeeStructure | null;
-  onSave: (
-    data: Database["public"]["Tables"]["fee_structures"]["Insert"],
-  ) => Promise<void>;
+  onSave: (data: Database["public"]["Tables"]["fee_structures"]["Insert"]) => Promise<void>;
   onClose: () => void;
 }
 
 const CLASSES = [
-  "Creche",
-  "Nursery 1",
-  "Nursery 2",
-  "Primary 1",
-  "Primary 2",
-  "Primary 3",
-  "Primary 4",
-  "Primary 5",
-  "Primary 6",
-  "JSS 1",
-  "JSS 2",
-  "JSS 3",
-  "SS 1",
-  "SS 2",
-  "SS 3",
+  "Creche", "Nursery 1", "Nursery 2",
+  "Primary 1", "Primary 2", "Primary 3",
+  "Primary 4", "Primary 5", "Primary 6",
+  "JSS 1", "JSS 2", "JSS 3",
+  "SS 1", "SS 2", "SS 3",
 ];
 const TERMS = ["First Term", "Second Term", "Third Term"];
-const FEE_TYPES = [
-  "Tuition",
-  "PTA Levy",
-  "Exam Fee",
-  "Uniform",
-  "Feeding",
-  "Development Levy",
-  "Books",
-  "Excursion",
-  "Miscellaneous",
+
+const DEFAULT_FEE_TYPES = [
+  "Tuition", "PTA Levy", "Exam Fee", "WAEC Exams",
+  "Uniform", "Feeding", "Development Levy",
+  "Books", "Excursion", "Party", "Miscellaneous",
 ];
 
-const input =
-  "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-400 transition";
+const input = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-400 transition";
 const label = "block text-xs font-medium text-gray-500 mb-1";
 
-export default function FeeStructureModal({
-  structure,
-  onSave,
-  onClose,
-}: Props) {
+export default function FeeStructureModal({ structure, onSave, onClose }: Props) {
   const [cls, setCls] = useState(CLASSES[3]);
   const [term, setTerm] = useState(TERMS[0]);
   const [session, setSession] = useState(() => {
     const y = new Date().getFullYear();
     return `${y}/${y + 1}`;
   });
-  const [feeType, setFeeType] = useState(FEE_TYPES[0]);
+  const [feeTypes, setFeeTypes] = useState<string[]>(DEFAULT_FEE_TYPES);
+  const [feeType, setFeeType] = useState(DEFAULT_FEE_TYPES[0]);
   const [customFeeType, setCustomFeeType] = useState("");
   const [amount, setAmount] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isCustom = feeType === "__custom__";
-  const resolvedFeeType = isCustom ? customFeeType : feeType;
+  const resolvedFeeType = isCustom ? customFeeType.trim() : feeType;
 
+  // Merge defaults with any custom types already saved in Supabase
   useEffect(() => {
-    if (structure) {
-      setCls(structure.class);
-      setTerm(structure.term);
-      setSession(structure.session);
-      setAmount(String(koboToNaira(structure.amount)));
-      if (FEE_TYPES.includes(structure.fee_type)) {
-        setFeeType(structure.fee_type);
-      } else {
-        setFeeType("__custom__");
-        setCustomFeeType(structure.fee_type);
+    fetchDistinctFeeTypes().then(saved => {
+      const merged = [
+        ...DEFAULT_FEE_TYPES,
+        ...saved.filter(t => !DEFAULT_FEE_TYPES.includes(t)),
+      ];
+      setFeeTypes(merged);
+
+      if (structure) {
+        setCls(structure.class);
+        setTerm(structure.term);
+        setSession(structure.session);
+        setAmount(String(koboToNaira(structure.amount)));
+        if (merged.includes(structure.fee_type)) {
+          setFeeType(structure.fee_type);
+        } else {
+          setFeeType("__custom__");
+          setCustomFeeType(structure.fee_type);
+        }
       }
-    }
+    }).catch(() => {
+      // fallback: still populate from structure if fetch fails
+      if (structure) {
+        setCls(structure.class);
+        setTerm(structure.term);
+        setSession(structure.session);
+        setAmount(String(koboToNaira(structure.amount)));
+        if (DEFAULT_FEE_TYPES.includes(structure.fee_type)) {
+          setFeeType(structure.fee_type);
+        } else {
+          setFeeType("__custom__");
+          setCustomFeeType(structure.fee_type);
+        }
+      }
+    });
   }, [structure]);
 
   async function handleSubmit(e: FormEvent) {
@@ -112,31 +115,19 @@ export default function FeeStructureModal({
   }
 
   return (
-    <Sheet
-      onClose={onClose}
-      title={structure ? "Edit Fee Structure" : "Add Fee Structure"}>
+    <Sheet onClose={onClose} title={structure ? "Edit Fee Structure" : "Add Fee Structure"}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={label}>Class</label>
-            <select
-              value={cls}
-              onChange={(e) => setCls(e.target.value)}
-              className={input}>
-              {CLASSES.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
+            <select value={cls} onChange={e => setCls(e.target.value)} className={input}>
+              {CLASSES.map(c => <option key={c}>{c}</option>)}
             </select>
           </div>
           <div>
             <label className={label}>Term</label>
-            <select
-              value={term}
-              onChange={(e) => setTerm(e.target.value)}
-              className={input}>
-              {TERMS.map((t) => (
-                <option key={t}>{t}</option>
-              ))}
+            <select value={term} onChange={e => setTerm(e.target.value)} className={input}>
+              {TERMS.map(t => <option key={t}>{t}</option>)}
             </select>
           </div>
         </div>
@@ -145,7 +136,7 @@ export default function FeeStructureModal({
           <label className={label}>Session</label>
           <input
             value={session}
-            onChange={(e) => setSession(e.target.value)}
+            onChange={e => setSession(e.target.value)}
             placeholder="e.g. 2024/2025"
             className={input}
           />
@@ -153,13 +144,8 @@ export default function FeeStructureModal({
 
         <div>
           <label className={label}>Fee Type</label>
-          <select
-            value={feeType}
-            onChange={(e) => setFeeType(e.target.value)}
-            className={input}>
-            {FEE_TYPES.map((f) => (
-              <option key={f}>{f}</option>
-            ))}
+          <select value={feeType} onChange={e => setFeeType(e.target.value)} className={input}>
+            {feeTypes.map(f => <option key={f}>{f}</option>)}
             <option value="__custom__">Other (custom)…</option>
           </select>
         </div>
@@ -168,8 +154,9 @@ export default function FeeStructureModal({
           <div>
             <label className={label}>Custom Fee Name</label>
             <input
+              autoFocus
               value={customFeeType}
-              onChange={(e) => setCustomFeeType(e.target.value)}
+              onChange={e => setCustomFeeType(e.target.value)}
               placeholder="e.g. Computer Levy"
               className={input}
             />
@@ -184,21 +171,16 @@ export default function FeeStructureModal({
             min="1"
             step="0.01"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={e => setAmount(e.target.value)}
             placeholder="0.00"
             className={input}
           />
         </div>
 
         {error && (
-          <p className="text-xs text-red-500 border border-red-200 rounded-lg px-3 py-2">
-            {error}
-          </p>
+          <p className="text-xs text-red-500 border border-red-200 rounded-lg px-3 py-2">{error}</p>
         )}
-        <SubmitButton
-          saving={saving}
-          label={structure ? "Save Changes" : "Add Fee Structure"}
-        />
+        <SubmitButton saving={saving} label={structure ? "Save Changes" : "Add Fee Structure"} />
       </form>
     </Sheet>
   );
